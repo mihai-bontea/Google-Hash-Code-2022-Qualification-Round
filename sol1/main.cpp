@@ -2,6 +2,7 @@
 #include <array>
 #include <iostream>
 #include "Data.h"
+#include "BoundedPriorityQueue.h"
 
 #include "BS_thread_pool.hpp"
 
@@ -33,7 +34,39 @@ std::mutex futures_mutex;
 std::vector<ProjectAllocation> get_top_n_available_allocations(const Data& data, const SimulationState& simulation_state, int n)
 {
     std::vector<ProjectAllocation> results;
-    // ...
+
+    // TODO: I could give additional score to a project if it can be used to increase a high-demand skill
+
+    using ScoreForAllocation = std::pair<int, ProjectAllocation>;
+    struct CompareScore {
+        bool operator()(const ScoreForAllocation& lhs, const ScoreForAllocation& rhs) const {
+            return lhs.first > rhs.first; // min-heap
+        }
+    };
+
+    BoundedPriorityQueue<ScoreForAllocation, CompareScore> top_n_queue(n);
+
+    auto lower_bound_it = data.projects.begin();
+    auto upper_bound_it = data.projects.end();
+
+    auto compute_score = [&simulation_state](const Project& project){
+        return std::max(0, project.score - simulation_state.day);
+    };
+
+    auto can_project_be_done = [](const Project& project){
+        return false;
+    };
+
+    for (auto it = lower_bound_it; it != upper_bound_it; ++it)
+    {
+        if (can_project_be_done(*it))
+            top_n_queue.push({compute_score(*it), {it->name, {}}});
+    }
+
+    auto top_n_sorted = top_n_queue.extract_sorted();
+    for (const auto& [score, alloc] : top_n_sorted)
+        results.push_back(alloc);
+
     return results;
 }
 

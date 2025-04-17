@@ -51,6 +51,10 @@ public:
         std::ifstream fin(filename);
         fin >> nr_contributors >> nr_projects;
 
+        // avoid re-allocations and over-allocations
+        contributors.reserve(nr_contributors);
+        projects.reserve(nr_projects);
+
         auto read_skills = [&fin](int count){
             std::map<std::string, int> skill_to_level;
             while (count--)
