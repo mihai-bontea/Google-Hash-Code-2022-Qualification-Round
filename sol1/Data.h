@@ -1,22 +1,28 @@
 #pragma once
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <vector>
 
 struct Contributor
 {
-    const std::string name;
+    std::string name;
     std::map<std::string, int> skill_to_level;
 
     Contributor(std::string&& name, std::map<std::string, int>&& skill_to_level)
     : name(std::move(name))
     , skill_to_level(std::move(skill_to_level))
     {}
+
+    bool operator<(const Contributor& rhs) const
+    {
+        return name < rhs.name;
+    }
 };
 
 struct Project
 {
-    const std::string name;
+    std::string name;
     int length_in_days, score, best_before_day;
     std::map<std::string, int> skill_to_level;
 
@@ -57,6 +63,7 @@ public:
             return  skill_to_level;
         };
 
+        // Read the contributor info
         for (int contr_index = 0; contr_index < nr_contributors; ++contr_index)
         {
             std::string name;
@@ -66,6 +73,7 @@ public:
             auto skill_to_level = read_skills(nr_skills);
             contributors.emplace_back(std::move(name), std::move(skill_to_level));
         }
+        // Read the project info
         for (int proj_index = 0; proj_index < nr_projects; ++proj_index)
         {
             std::string name;
@@ -73,5 +81,9 @@ public:
             auto skill_to_level = read_skills(nr_roles);
             projects.emplace_back(std::move(name), length_in_days, score, best_before_day, std::move(skill_to_level));
         }
+        // Sort projects based on best before day
+        std::sort(projects.begin(), projects.end(), [](const auto& lhs, const auto& rhs){
+            return lhs.best_before_day < rhs.best_before_day;
+        });
     }
 };
