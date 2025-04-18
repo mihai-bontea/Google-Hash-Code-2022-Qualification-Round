@@ -1,37 +1,21 @@
 #include <set>
 #include <array>
+#include <bitset>
 #include <iostream>
 #include "Data.h"
 #include "BoundedPriorityQueue.h"
-
+#include "ProjectAllocator.h"
 #include "BS_thread_pool.hpp"
-
-using ProjectAllocation = std::pair<std::string, std::vector<std::string>>;
 
 BS::thread_pool pool(9);
 int best_score;
 std::vector<ProjectAllocation> best_allocation;
 using namespace std::chrono_literals;
 
-struct SimulationState
-{
-    int day, score_so_far;
-    std::set<Contributor> contributors;
-    std::vector<ProjectAllocation> proj_to_contrib;
-    std::map<std::string, std::vector<std::string>> skill_to_contrib;
-    std::map<std::string, int> contrib_to_availability;
-
-    SimulationState(const std::vector<Contributor>& contributors)
-    : day(0)
-    , score_so_far(0)
-    , contributors(std::set(contributors.begin(), contributors.end()))
-    {}
-};
-
 std::vector<std::future<SimulationState>> futures;
 std::mutex futures_mutex;
 
-std::vector<ProjectAllocation> get_top_n_available_allocations(const Data& data, const SimulationState& simulation_state, int n)
+std::vector<ProjectAllocation> get_top_n_available_allocations(const Data& data, SimulationState& simulation_state, int n)
 {
     std::vector<ProjectAllocation> results;
 
@@ -46,21 +30,21 @@ std::vector<ProjectAllocation> get_top_n_available_allocations(const Data& data,
 
     BoundedPriorityQueue<ScoreForAllocation, CompareScore> top_n_queue(n);
 
-    auto lower_bound_it = data.projects.begin();
-    auto upper_bound_it = data.projects.end();
+    int lower_bound = 0;
+    int upper_bound = data.nr_projects;
 
     auto compute_score = [&simulation_state](const Project& project){
         return std::max(0, project.score - simulation_state.day);
     };
 
-    auto can_project_be_done = [](const Project& project){
-        return false;
-    };
-
-    for (auto it = lower_bound_it; it != upper_bound_it; ++it)
+    for (int project_index = lower_bound; project_index < upper_bound; ++project_index)
     {
-        if (can_project_be_done(*it))
-            top_n_queue.push({compute_score(*it), {it->name, {}}});
+        const auto& project = data.projects[project_index];
+        auto contributor_ids = ProjectAllocator::find_allocation_for_project(simulation_state, project);
+
+        int score = compute_score(project);
+        if (!contributor_ids.empty() && score > 0)
+            top_n_queue.push({score, {project_index, contributor_ids}});
     }
 
     auto top_n_sorted = top_n_queue.extract_sorted();
@@ -70,26 +54,72 @@ std::vector<ProjectAllocation> get_top_n_available_allocations(const Data& data,
     return results;
 }
 
+SimulationState simulate(const Data& data, SimulationState simulation_state, int k);
+
+void add_task_to_pool(const Data&data, const SimulationState& simulation_state)
+{
+    std::lock_guard<std::mutex> lock(futures_mutex);
+
+    auto future_for_task = pool.submit_task([&]() { return simulate(data, simulation_state, 10); });
+    futures.push_back(std::move(future_for_task));
+}
+
 SimulationState simulate(const Data& data, SimulationState simulation_state, int k)
 {
     int current_step = 0;
     while (true)
     {
+        bool allocation_failed = false;
         if (current_step == k)
         {
-            const auto top_n_allocations = get_top_n_available_allocations(data, simulation_state, 5);
-            if (top_n_allocations.empty())
-                break;
-            // Split in 5, append to threadpool
-
             current_step = 0;
+            continue;
+
+            auto top_n_allocations = get_top_n_available_allocations(data, simulation_state, 5);
+            if (!top_n_allocations.empty())
+            {
+                allocation_failed = true;
+            }
+            else
+            {
+                auto top_1_allocation = top_n_allocations.front();
+                top_n_allocations.erase(top_n_allocations.begin());
+
+                for (const auto& allocation : top_n_allocations)
+                {
+                    auto new_simulation_state = simulation_state;
+                    new_simulation_state.add_allocation(allocation);
+
+                    ProjectAllocator::update_contributors(data, new_simulation_state, allocation);
+                    add_task_to_pool(data, new_simulation_state);
+                }
+                simulation_state.add_allocation(top_1_allocation);
+                ProjectAllocator::update_contributors(data, simulation_state, top_1_allocation);
+                current_step = 0;
+            }
         }
         else
         {
-            const auto top_1_allocation = get_top_n_available_allocations(data, simulation_state, 1);
-            if (top_1_allocation.empty())
+            const auto top_n_allocations = get_top_n_available_allocations(data, simulation_state, 1);
+            if (top_n_allocations.empty())
+            {
+                allocation_failed = true;
+            }
+            else
+            {
+                const auto& top_1_allocation = top_n_allocations.front();
+                simulation_state.add_allocation(top_1_allocation);
+                ProjectAllocator::update_contributors(data, simulation_state, top_1_allocation);
+                current_step++;
+            }
+        }
+
+        if (allocation_failed)
+        {
+            int prev_day = simulation_state.day;
+            simulation_state.pass_days();
+            if (prev_day == simulation_state.day)
                 break;
-            // Update contributor's skill, score, etc
         }
     }
     return simulation_state;
@@ -121,14 +151,6 @@ void poll_finished_futures()
     }
 }
 
-void add_task_to_pool(const Data&data, const SimulationState& simulation_state)
-{
-    std::lock_guard<std::mutex> lock(futures_mutex);
-
-    auto future_for_task = pool.submit_task([&]() { return simulate(data, simulation_state, 10); });
-    futures.push_back(std::move(future_for_task));
-}
-
 void solve(const Data& data)
 {
     SimulationState base_simulation(data.contributors);
@@ -143,11 +165,9 @@ void solve(const Data& data)
                 break;
         }
 
-        std::this_thread::sleep_for(10000ms);
+        std::this_thread::sleep_for(5000ms);
     }
 }
-
-
 
 int main()
 {

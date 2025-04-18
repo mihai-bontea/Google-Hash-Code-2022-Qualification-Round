@@ -8,10 +8,15 @@ struct Contributor
 {
     std::string name;
     std::map<std::string, int> skill_to_level;
+    int busy_until;
 
     Contributor(std::string&& name, std::map<std::string, int>&& skill_to_level)
     : name(std::move(name))
     , skill_to_level(std::move(skill_to_level))
+    , busy_until(0)
+    {}
+
+    explicit Contributor(std::string name): name(std::move(name))
     {}
 
     bool operator<(const Contributor& rhs) const
@@ -24,13 +29,13 @@ struct Project
 {
     std::string name;
     int length_in_days, score, best_before_day;
-    std::map<std::string, int> skill_to_level;
+    std::vector<std::pair<std::string, int>> skill_to_level;
 
     Project(std::string&& name,
             int length_in_days,
             int score,
             int best_before_day,
-            std::map<std::string, int>&& skill_to_level)
+            std::vector<std::pair<std::string, int>>&& skill_to_level)
             : name(std::move(name))
             , length_in_days(length_in_days)
             , score(score)
@@ -82,7 +87,18 @@ public:
         {
             std::string name;
             int length_in_days, score, best_before_day, nr_roles;
-            auto skill_to_level = read_skills(nr_roles);
+            std::vector<std::pair<std::string, int>> skill_to_level;
+            fin >> name >> length_in_days >> score >> best_before_day >> nr_roles;
+            skill_to_level.reserve(nr_roles);
+
+            while (nr_roles--)
+            {
+                std::string skill_name;
+                int skill_level;
+                fin >> skill_name >> skill_level;
+                skill_to_level.emplace_back(skill_name, skill_level);
+            }
+
             projects.emplace_back(std::move(name), length_in_days, score, best_before_day, std::move(skill_to_level));
         }
         // Sort projects based on best before day
