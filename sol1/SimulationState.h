@@ -1,44 +1,61 @@
 #pragma once
 #include <map>
 #include <vector>
+#include <bitset>
 
 #include "Data.h"
+#include "ProjectAllocator.h"
 
 #define NMAX 999999999
 
-using ProjectAllocation = std::pair<int, std::vector<int>>;
+using ProjectAllocation = std::pair<int, std::vector<std::string>>;
 
 struct SimulationState
 {
     int day, score_so_far;
-    std::vector<Contributor> contributors;
     std::vector<ProjectAllocation> proj_to_contrib;
-    std::map<std::string, std::vector<int>> skill_to_contrib_id;
+    std::map<std::string, int> available_at;
+    std::map<std::string, std::set<std::string>[21]> skill_to_contributors;
+    std::bitset<MAX_PROJECTS> project_done;
 
-    explicit SimulationState(const std::vector<Contributor>& contributors)
+    explicit SimulationState(const std::map<std::string, std::set<std::string>[21]>& skill_to_contributors)
             : day(0)
             , score_so_far(0)
-            , contributors(contributors)
+            , skill_to_contributors(skill_to_contributors)
     {
-        for (int contributor_index = 0; contributor_index < contributors.size(); ++contributor_index)
+        for (const auto& [skill, contribs_per_level] : skill_to_contributors)
         {
-            for (const auto& [skill, _] : contributors[contributor_index].skill_to_level)
-                skill_to_contrib_id[skill].push_back(contributor_index);
+            for (int i = 0; i <= 20; ++i)
+            {
+                const auto contr_per_levels = skill_to_contributors.find(skill)->second;
+                if (contr_per_levels[i].empty())
+                    continue;
+
+                for (const auto& contrib_name : contr_per_levels[i])
+                    available_at[contrib_name] = 0;
+            }
         }
     }
 
-    void add_allocation(const ProjectAllocation& allocation)
+    void add_allocation(const Data& data, const ProjectAllocation& allocation)
     {
         proj_to_contrib.push_back(allocation);
+        const auto& [project_id, contributor_names] = allocation;
+        project_done[project_id] = true;
+
+        for (const auto& name : contributor_names)
+        {
+            available_at[name] = data.projects[project_id].length_in_days + day;
+        }
     }
 
     void pass_days()
     {
-        int day_to_jump_to = 999999999;
-        for (const auto& contributor : contributors)
+        int day_to_jump_to = NMAX;
+        for (const auto& [name, time] : available_at)
         {
-            if (contributor.busy_until > day && contributor.busy_until < day_to_jump_to)
-                day_to_jump_to = contributor.busy_until;
+            if (time > day && time < day_to_jump_to)
+                day_to_jump_to = time;
         }
         day = day_to_jump_to;
     }

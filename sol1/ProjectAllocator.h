@@ -14,25 +14,28 @@ using WeightedAllocation = std::pair<int, std::vector<std::string>>;
 class ProjectAllocator
 {
 public:
-    static WeightedAllocation find_alloc(const SimulationState& simulation_state, const std::vector<std::pair<std::string, int>>& skill_to_level)
+    static WeightedAllocation find_alloc(const SimulationState& simulation_state,
+                                         const std::vector<std::pair<std::string, int>>& skill_to_level,
+                                         bool skip_mentoring)
     {
         std::random_device rd;
         std::mt19937 g(rd());
         auto skill_to_level_copy = skill_to_level;
         std::shuffle(skill_to_level_copy.begin(), skill_to_level_copy.end(), g);
 
-        std::map<std::string, bool> contr_already_chosen, needs_mentorship;
+        std::set<std::string> contr_already_chosen;
         std::map<std::string, std::string> role_to_contr, valid_solution;
         int solution_points = 0;
 
         auto start = steady_clock::now();
         std::function<void(int)> find_allocation_backtracking = [&](int step){
             auto now = steady_clock::now();
-
             // Solution found/timer expired, stop execution
             auto elapsed = duration_cast<seconds>(now - start);
-            if (!valid_solution.empty() || elapsed.count() >= 20)
+            if (!valid_solution.empty() || elapsed.count() >= 15)
+            {
                 return;
+            }
 
             if (step == skill_to_level.size())
             {
@@ -41,13 +44,19 @@ public:
                 for (const auto& [curr_skill, level_req] : skill_to_level)
                 {
                     const auto& contr_for_role = role_to_contr[curr_skill];
-                    const auto contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
+                    const auto& contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
 
                     auto can_others_mentor = [&contr_per_levels, &role_to_contr, level_req](){
                         for (const auto& [_, contr_name]: role_to_contr)
+                        {
                             for (int level = level_req; level <= 20; ++level)
-                                if (contr_per_levels[level].contains(contr_name))
+                            {
+
+                                if (contr_per_levels[level].contains(contr_name)) {
                                     return true;
+                                }
+                            }
+                        }
                         return false;
                     };
 
@@ -55,7 +64,6 @@ public:
                         return contr_per_levels[level_req - 1].contains(contr_name);
                     };
 
-                    // Needs mentorship
                     if (needs_mentorship(contr_for_role))
                     {
                         if (can_others_mentor())
@@ -79,23 +87,25 @@ public:
             {
                 auto [curr_skill, level_req] = skill_to_level_copy[step];
                 // For skill between [level_req - 1, max)
-                for (int contr_level = level_req - 1; contr_level <= 20; ++contr_level)
+                for (int contr_level = level_req - 1 + skip_mentoring; contr_level <= 20; ++contr_level)
                 {
-                    const auto contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
+                    const auto& contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
                     // Going over all contributors with skill == contr_level
                     for (const auto &contr_name: contr_per_levels[contr_level])
                     {
                         int contr_available_at = (simulation_state.available_at.find(contr_name)->second);
-                        // Skip if busy at this day, or already chosen
-                        if (contr_already_chosen[contr_name] || contr_available_at > simulation_state.day)
-                            continue;
 
-                        contr_already_chosen[contr_name] = true;
+                        if (contr_already_chosen.contains(contr_name) || contr_available_at > simulation_state.day)
+                        {
+                            continue;
+                        }
+                        contr_already_chosen.insert(contr_name);
                         role_to_contr[curr_skill] = contr_name;
 
-                        find_allocation_backtracking(step + 1);
+                        if (valid_solution.empty())
+                            find_allocation_backtracking(step + 1);
 
-                        contr_already_chosen[contr_name] = false;
+                        contr_already_chosen.erase(contr_name);
                     }
                 }
             }
@@ -125,7 +135,8 @@ public:
         std::vector<std::future<WeightedAllocation>> futures;
         for (int th_index = 0; th_index < 10; ++th_index)
         {
-            auto future_for_task = pool.submit_task([&]() { return find_alloc(simulation_state, skill_to_level); });
+            bool skip_mentoring = th_index % 2;
+            auto future_for_task = pool.submit_task([&]() { return find_alloc(simulation_state, skill_to_level, skip_mentoring); });
             futures.push_back(std::move(future_for_task));
         }
 
@@ -143,6 +154,21 @@ public:
 
     static void update_contributors(const Data& data, SimulationState& simulation_state, const ProjectAllocation& project_allocation)
     {
+        const auto& [project_id, contributor_names] = project_allocation;
+        const auto& project = data.projects[project_id];
 
+        int role_id = 0;
+        for (const auto& name : contributor_names)
+        {
+            const auto& [role_name, skill_req] = project.skill_to_level[role_id];
+            const auto contr_per_levels = simulation_state.skill_to_contributors.find(role_name)->second;
+
+            if (contr_per_levels[skill_req - 1].contains(name))
+            {
+                contr_per_levels[skill_req - 1].erase(name);
+                contr_per_levels[skill_req].insert(name);
+            }
+            role_id++;
+        }
     }
 };
