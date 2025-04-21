@@ -93,4 +93,4 @@ for solution in solutions:
             print(f"--->For {input_file} we obtained score = {score:,}, skill_increase = {skill_increase:,}.\n")
         
         except FileNotFoundError:
-                print(f"Error: File '{full_solution_path}' not found.")
+            print(f"Error: File '{full_solution_path}' not found.")
