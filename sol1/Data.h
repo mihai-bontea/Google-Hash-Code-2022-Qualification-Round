@@ -100,6 +100,7 @@ public:
     void write_to_file(const std::string& filename, const std::vector<ProjectAllocation>& allocation) const
     {
         std::ofstream fout(filename);
+        fout << allocation.size() << '\n';
         for (const auto& [project_id, contributor_names] : allocation)
         {
             fout << projects[project_id].name << '\n';
