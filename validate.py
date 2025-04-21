@@ -31,6 +31,7 @@ def read_input_file(filename):
             for skill in all_skills:
                 skills.setdefault(skill, 0)
         
+        # Reading project information
         proj_name_to_info = {
             name: ProjectInfo(int(length_in_days), int(score), int(best_before), 
                               [(skill, int(level)) for skill, level in (fin.readline().split() for _ in range(int(nr_roles)))])
