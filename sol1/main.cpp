@@ -35,12 +35,13 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
 
     std::priority_queue<std::pair<int, int>> pq;
     for (int project_index = lower_bound; project_index < upper_bound; ++project_index)
-        if (!simulation_state.project_done[project_index])
+        if (simulation_state.can_project_be_done(data, project_index))
         {
             const auto& project = data.projects[project_index];
             pq.emplace(compute_score(project, 0), project_index);
         }
 
+    auto start = steady_clock::now();
     while (!pq.empty())
     {
         auto [approx_score, project_index] = pq.top();
@@ -55,6 +56,10 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
             break;
         }
     }
+    auto now = steady_clock::now();
+    auto elapsed = duration_cast<seconds>(now - start);
+    std::cout << "Got a new allocation in " << elapsed.count() << " seconds.\n";
+
     return best_allocation;
 }
 

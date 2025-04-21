@@ -27,7 +27,7 @@ struct SimulationState
         {
             for (int i = 0; i <= 20; ++i)
             {
-                const auto contr_per_levels = skill_to_contributors.find(skill)->second;
+                const auto& contr_per_levels = skill_to_contributors.find(skill)->second;
                 if (contr_per_levels[i].empty())
                     continue;
 
@@ -58,5 +58,55 @@ struct SimulationState
                 day_to_jump_to = time;
         }
         day = day_to_jump_to;
+    }
+
+    bool can_project_be_done(const Data& data, int project_index)
+    {
+        if (project_done[project_index])
+            return false;
+
+        // At least one non-unique contributor who has that skill at >= level_req must be available
+        for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
+        {
+            const auto& contr_per_levels = skill_to_contributors.find(curr_skill)->second;
+            bool ok = false;
+            for (int i = level_req; i <= 20; ++i)
+            {
+                for (const auto& contrib_name : contr_per_levels[i])
+                    if (available_at[contrib_name] <= day)
+                    {
+                        ok = true;
+                        break;
+                    }
+                if (ok)
+                    break;
+            }
+            if (!ok)
+                return false;
+        }
+
+        // At least one unique contributor who has that skill at >= level_req - 1 must be available
+        std::set<std::string> contr_already_chosen;
+        for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
+        {
+            const auto& contr_per_levels = skill_to_contributors.find(curr_skill)->second;
+            bool ok = false;
+
+            for (int i = level_req - 1; i <= 20; ++i)
+            {
+                for (const auto& contrib_name : contr_per_levels[i])
+                    if (available_at[contrib_name] <= day && !contr_already_chosen.contains(contrib_name))
+                    {
+                        ok = true;
+                        contr_already_chosen.insert(contrib_name);
+                        break;
+                    }
+                if (ok)
+                    break;
+            }
+            if (!ok)
+                return false;
+        }
+        return true;
     }
 };
