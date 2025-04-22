@@ -82,7 +82,7 @@ SimulationState simulate(const Data& data, SimulationState simulation_state)
 int main()
 {
     const std::string in_prefix = "../../input_files/";
-    const std::string out_prefix = "../../output_files/sol2/";
+    const std::string out_prefix = "../../output_files/sol1/";
     const std::array<std::string, 6> input_files = {"a_an_example.in", "b_better_start_small.in", "c_collaboration.in",
                                           "d_dense_schedule.in", "e_exceptional_skills.in", "f_find_great_mentors.in"};
 

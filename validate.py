@@ -1,4 +1,3 @@
-
 solutions = ["sol1"]
 input_files = ["a_an_example", "b_better_start_small", "c_collaboration", 
                "d_dense_schedule", "e_exceptional_skills", "f_find_great_mentors"]
