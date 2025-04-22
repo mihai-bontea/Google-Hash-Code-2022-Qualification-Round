@@ -16,31 +16,15 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
             }
     );
 
-//    int lower_bound = it - data.projects.begin();
-    int lower_bound = 0;
+    int lower_bound = it - data.projects.begin();
     int upper_bound = data.nr_projects;
-//    std::cout << "[" << lower_bound << ", " << upper_bound << "]\n";
-
-    auto compute_score = [&simulation_state](const Project& project, int learning_points){
-//        int manpower_consumed = project.length_in_days * project.skill_to_level.size();
-        int penalty = (project.best_before_day > simulation_state.day + project.length_in_days)? 0 : simulation_state.day + project.length_in_days - project.best_before_day;
-//        int adjusted_score = std::max(0, (project.score - penalty)) / manpower_consumed + learning_points * 10;
-        int adjusted_score = std::max(0, project.score - penalty);
-        return adjusted_score;
-    };
-
-    int best_score = 0;
-    WeightedAllocation best_allocation;
-    int count = 0;
 
     std::priority_queue<std::pair<int, int>> pq;
     for (int project_index = lower_bound; project_index < upper_bound; ++project_index)
-        if (simulation_state.can_project_be_done(data, project_index))
-        {
-            const auto& project = data.projects[project_index];
-            pq.emplace(compute_score(project, 0), project_index);
-        }
+        if (simulation_state.can_project_be_done(project_index))
+            pq.emplace(simulation_state.actual_score(project_index), project_index);
 
+    WeightedAllocation best_allocation;
     auto start = steady_clock::now();
     while (!pq.empty())
     {
@@ -52,8 +36,13 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
 
         if (!contributor_names.empty())
         {
-            best_allocation = {project_index, contributor_names};
-            break;
+            if (!simulation_state.actual_score(project_index) && !learning_points)
+                simulation_state.project_done[project_index] = true;
+            else
+            {
+                best_allocation = {project_index, contributor_names};
+                break;
+            }
         }
     }
     auto now = steady_clock::now();
@@ -65,7 +54,6 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
 
 SimulationState simulate(const Data& data, SimulationState simulation_state)
 {
-    int current_step = 0;
     while (simulation_state.day != NMAX)
     {
         auto best_allocation = get_best_allocation(data, simulation_state, 5);
@@ -80,7 +68,7 @@ SimulationState simulate(const Data& data, SimulationState simulation_state)
             continue;
         }
 
-        simulation_state.add_allocation(data, best_allocation);
+        simulation_state.add_allocation(best_allocation);
         ProjectAllocator::update_contributors(data, simulation_state, best_allocation);
 
         const auto& project = data.projects[project_id];
@@ -94,7 +82,7 @@ SimulationState simulate(const Data& data, SimulationState simulation_state)
 int main()
 {
     const std::string in_prefix = "../../input_files/";
-    const std::string out_prefix = "../../output_files/sol1/";
+    const std::string out_prefix = "../../output_files/sol2/";
     const std::array<std::string, 6> input_files = {"a_an_example.in", "b_better_start_small.in", "c_collaboration.in",
                                           "d_dense_schedule.in", "e_exceptional_skills.in", "f_find_great_mentors.in"};
 
@@ -104,13 +92,10 @@ int main()
 
         std::cout << "Successfully read " << data.nr_contributors << " contributors, and " << data.nr_projects << " projects\n";
 
-        if (input_file == "c_collaboration.in")
-            continue;
-
-        SimulationState base_simulation(data.skill_to_contributors);
+        SimulationState base_simulation(data, data.skill_to_contributors);
         auto result = simulate(data, base_simulation);
 
-        auto out_filename = out_prefix + input_file.substr(0, (input_file.find('.'))) + ".out";
+        const auto out_filename = out_prefix + input_file.substr(0, (input_file.find('.'))) + ".out";
         data.write_to_file(out_filename, result.proj_to_contrib);
     }
     return 0;

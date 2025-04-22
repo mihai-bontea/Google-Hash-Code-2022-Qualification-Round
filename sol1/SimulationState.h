@@ -12,15 +12,17 @@ using ProjectAllocation = std::pair<int, std::vector<std::string>>;
 
 struct SimulationState
 {
+    const Data& data;
     int day, score_so_far;
     std::vector<ProjectAllocation> proj_to_contrib;
     std::map<std::string, int> available_at;
     std::map<std::string, std::set<std::string>[21]> skill_to_contributors;
     std::bitset<MAX_PROJECTS> project_done;
 
-    explicit SimulationState(const std::map<std::string, std::set<std::string>[21]>& skill_to_contributors)
+    explicit SimulationState(const Data& data, const std::map<std::string, std::set<std::string>[21]>& skill_to_contributors)
             : day(0)
             , score_so_far(0)
+            , data(data)
             , skill_to_contributors(skill_to_contributors)
     {
         for (const auto& [skill, contribs_per_level] : skill_to_contributors)
@@ -37,7 +39,7 @@ struct SimulationState
         }
     }
 
-    void add_allocation(const Data& data, const ProjectAllocation& allocation)
+    void add_allocation(const ProjectAllocation& allocation)
     {
         proj_to_contrib.push_back(allocation);
         const auto& [project_id, contributor_names] = allocation;
@@ -60,8 +62,17 @@ struct SimulationState
         day = day_to_jump_to;
     }
 
-    bool can_project_be_done(const Data& data, int project_index)
+    int actual_score(int project_index)
     {
+        const auto& project = data.projects[project_index];
+        int penalty = (project.best_before_day > day + project.length_in_days)? 0 :
+                day + project.length_in_days - project.best_before_day;
+        return std::max(0, (project.score - penalty));
+    };
+
+    bool can_project_be_done(int project_index)
+    {
+        // Project has already been done/deemed unuseful
         if (project_done[project_index])
             return false;
 
