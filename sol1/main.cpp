@@ -22,7 +22,7 @@ ProjectAllocation get_best_allocation(const Data& data, SimulationState& simulat
     std::priority_queue<std::pair<int, int>> pq;
     for (int project_index = lower_bound; project_index < upper_bound; ++project_index)
         if (simulation_state.can_project_be_done(project_index))
-            pq.emplace(simulation_state.actual_score(project_index), project_index);
+            pq.emplace(simulation_state.heuristic_score(project_index), project_index);
 
     WeightedAllocation best_allocation;
     auto start = steady_clock::now();

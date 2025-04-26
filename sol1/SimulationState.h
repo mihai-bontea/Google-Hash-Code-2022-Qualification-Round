@@ -1,5 +1,6 @@
 #pragma once
 #include <map>
+#include <cmath>
 #include <vector>
 #include <bitset>
 
@@ -60,6 +61,16 @@ struct SimulationState
                 day_to_jump_to = time;
         }
         day = day_to_jump_to;
+    }
+
+    int heuristic_score(int project_index)
+    {
+        const auto& project = data.projects[project_index];
+        int manpower_penalty = project.length_in_days * project.skill_to_level.size();
+        int day_penalty = (project.best_before_day > day + project.length_in_days)? 0 :
+                      day + project.length_in_days - project.best_before_day;
+
+        return std::max(0, ((int)std::pow(project.score, 2) - manpower_penalty - day_penalty));
     }
 
     int actual_score(int project_index)
