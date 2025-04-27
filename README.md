@@ -17,11 +17,9 @@ By analyzing the input files, we can see that the highest skill level required f
 | Input File              | Score      | Skill Increase |
 |-------------------------|------------|----------------|
 | a_an_example            | 20         | 0              |
-| b_better_start_small    | 323,526    | 20             |
-| c_collaboration         | 249,602    | 0              |
+| b_better_start_small    | 344,991    | 29             |
+| c_collaboration         | 255,027    | 57             |
 | d_dense_schedule        | 53,712     | 8              |
-| e_exceptional_skills    | 1,591,807  | 619            |
-| f_find_great_mentors    | 592,707    | 52,166         |
-| **Total**               | **2,811,374** | **52,813**  |
-
-Thread pool used: https://github.com/bshoshany/thread-pool
+| e_exceptional_skills    | 1,601,565  | 1,464          |
+| f_find_great_mentors    | 599,091    | 54,939         |
+| **Total**               | **2,854,406** | **56,497**  |

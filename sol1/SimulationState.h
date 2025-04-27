@@ -69,8 +69,9 @@ struct SimulationState
         int manpower_penalty = project.length_in_days * project.skill_to_level.size();
         int day_penalty = (project.best_before_day > day + project.length_in_days)? 0 :
                       day + project.length_in_days - project.best_before_day;
+        int ahead_of_time_penalty = std::max(0, project.best_before_day - project.length_in_days - day) * 3;
 
-        return std::max(0, ((int)std::pow(project.score, 2) - manpower_penalty - day_penalty));
+        return std::max(0, ((int)std::pow(project.score, 2) - manpower_penalty - day_penalty - ahead_of_time_penalty));
     }
 
     int actual_score(int project_index)
