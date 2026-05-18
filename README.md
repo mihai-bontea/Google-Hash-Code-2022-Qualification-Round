@@ -28,36 +28,93 @@ By analyzing the input files, we can see that the highest skill level required f
 
 <img width="2714" height="1729" alt="Image" src="https://github.com/user-attachments/assets/6c49a553-ab64-4925-a6e8-543520471635" />
 
-1) Top N Skills: Supply vs Demand
+## 1) Top N Skills: Supply vs Demand
 
-For the most-demanded skills, display in green the number of contributors with the skill at level >= 1, red = total roles across all projects requiring it.
+For the most-demanded skills:
 
-2) Top N Scarcest Skills
+- 🟩 **Green** = number of contributors with the skill at level `>= 1`
+- 🟥 **Red** = total roles across all projects requiring it
+
+---
+
+## 2) Top N Scarcest Skills
 
 A single rating that collapses supply and demand into one score per skill:
 
-scarcity(skill) = Σ_L  demand_at_L(skill) · L / max(1, supply_≥L(skill))
+\[
+\text{scarcity(skill)} =
+\sum_L
+\frac{
+\text{demand\_at\_L(skill)} \cdot L
+}{
+\max(1,\ \text{supply}_{\ge L}(\text{skill}))
+}
+\]
 
-Skills at the top are the leverage points: staff them first and many projects unlock.
+Skills at the top are the **leverage points**: staff them first and many projects unlock.
 
-3) Supply (>=L) - Demand (=L) Heatmap
+---
 
-The same metric as above, but decomposed by level. Helps show which levels are more undersupplied.
+## 3) Supply (`>= L`) - Demand (`= L`) Heatmap
 
-4) Project Slack Distribution
+The same metric as above, but decomposed by level.
 
-slack = best before - duration
+Helps show which levels are more undersupplied.
 
-Negative slack means that the project is impossible to complete. Tight count(less than 5 days) and the median are also displayed.
+---
 
-5) Reward vs Scarcity Tax
+## 4) Project Slack Distribution
 
-The strategic tradeoff plot: each project is defined by its score density(score / duration), project rarity cost(does it use scarce skills?). The size of the point on the graph is directly proportional to the total score. The color shows the slack in days (red = tight deadline, blue = lots of room)
+\[
+\text{slack} = \text{best before} - \text{duration}
+\]
 
-6) Project Staffing Pressure
+- Negative slack means that the project is impossible to complete.
+- Tight count (`< 5` days) and the median are also displayed.
 
-For each role, we are interested in the congestion: global demand / global supply, i.e. how many other roles across all projects are competing for the same pool of people.
+---
 
-The dashed line marks the average roles-per-project baseline. Projects above it are fighting for contested talent.
+## 5) Reward vs Scarcity Tax
 
-Unlike the rarity cost in the previous panel (which weighs by level), this metric weighs by competition. A project can be low rarity but high pressure (common skills, but everyone wants them) or high rarity but low pressure (deep expert needed, but only this one project needs them).
+The strategic tradeoff plot:
+
+Each project is defined by:
+
+- **Score density** (`score / duration`)
+- **Project rarity cost** (does it use scarce skills?)
+
+Additional encodings:
+
+- **Point size** ∝ total project score
+- **Color** = slack in days
+  - 🔴 Red → tight deadline
+  - 🔵 Blue → lots of room
+
+---
+
+## 6) Project Staffing Pressure
+
+For each role, we are interested in the **congestion**:
+
+\[
+\text{congestion} =
+\frac{\text{global demand}}{\text{global supply}}
+\]
+
+i.e. how many other roles across all projects are competing for the same pool of people.
+
+The dashed line marks the **average roles-per-project baseline**.
+
+Projects above it are fighting for contested talent.
+
+> Unlike the rarity cost in the previous panel (which weighs by level), this metric weighs by competition.
+
+A project can be:
+
+- **Low rarity but high pressure**  
+  (common skills, but everyone wants them)
+
+or
+
+- **High rarity but low pressure**  
+  (deep expert needed, but only this one project needs them)
