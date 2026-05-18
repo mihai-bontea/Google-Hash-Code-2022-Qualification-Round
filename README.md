@@ -41,33 +41,21 @@ For the most-demanded skills:
 
 A single rating that collapses supply and demand into one score per skill:
 
-\[
-\text{scarcity(skill)} =
-\sum_L
-\frac{
-\text{demand\_at\_L(skill)} \cdot L
-}{
-\max(1,\ \text{supply}_{\ge L}(\text{skill}))
-}
-\]
+scarcity(skill) = Σ_L  demand_at_L(skill) · L / max(1, supply_≥L(skill))
 
-Skills at the top are the **leverage points**: staff them first and many projects unlock.
+Skills at the top are the leverage points: staff them first and many projects unlock.
 
 ---
 
-### 3) Supply (`>= L`) - Demand (`= L`) Heatmap
+### 3) Supply (>=L) - Demand (=L) Heatmap
 
-The same metric as above, but decomposed by level.
-
-Helps show which levels are more undersupplied.
+The same metric as above, but decomposed by level. Helps show which levels are more undersupplied.
 
 ---
 
 ### 4) Project Slack Distribution
 
-\[
-\text{slack} = \text{best before} - \text{duration}
-\]
+slack = best before - duration
 
 - Negative slack means that the project is impossible to complete.
 - Tight count (`< 5` days) and the median are also displayed.
@@ -94,27 +82,8 @@ Additional encodings:
 
 ### 6) Project Staffing Pressure
 
-For each role, we are interested in the **congestion**:
+For each role, we are interested in the congestion: global demand / global supply, i.e. how many other roles across all projects are competing for the same pool of people.
 
-\[
-\text{congestion} =
-\frac{\text{global demand}}{\text{global supply}}
-\]
+The dashed line marks the average roles-per-project baseline. Projects above it are fighting for contested talent.
 
-i.e. how many other roles across all projects are competing for the same pool of people.
-
-The dashed line marks the **average roles-per-project baseline**.
-
-Projects above it are fighting for contested talent.
-
-> Unlike the rarity cost in the previous panel (which weighs by level), this metric weighs by competition.
-
-A project can be:
-
-- **Low rarity but high pressure**  
-  (common skills, but everyone wants them)
-
-or
-
-- **High rarity but low pressure**  
-  (deep expert needed, but only this one project needs them)
+Unlike the rarity cost in the previous panel (which weighs by level), this metric weighs by competition. A project can be low rarity but high pressure (common skills, but everyone wants them) or high rarity but low pressure (deep expert needed, but only this one project needs them).
