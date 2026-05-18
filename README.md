@@ -41,9 +41,9 @@ For the most-demanded skills:
 
 A single rating that collapses supply and demand into one score per skill:
 
-scarcity(skill) = Σ_L  demand_at_L(skill) · L / max(1, supply_≥L(skill))
+**scarcity(skill) = Σ_L  demand_at_L(skill) · L / max(1, supply_≥L(skill))**
 
-Skills at the top are the leverage points: staff them first and many projects unlock.
+Skills at the top are the leverage points: **staff them first and many projects unlock**.
 
 ---
 
@@ -55,7 +55,7 @@ The same metric as above, but decomposed by level. Helps show which levels are m
 
 ### 4) Project Slack Distribution
 
-slack = best before - duration
+**slack = best before - duration**
 
 - Negative slack means that the project is impossible to complete.
 - Tight count (`< 5` days) and the median are also displayed.
@@ -82,7 +82,7 @@ Additional encodings:
 
 ### 6) Project Staffing Pressure
 
-For each role, we are interested in the congestion: global demand / global supply, i.e. how many other roles across all projects are competing for the same pool of people.
+For each role, we are interested in the congestion: global demand / global supply, i.e. **how many other roles across all projects are competing for the same pool of people**.
 
 The dashed line marks the average roles-per-project baseline. Projects above it are fighting for contested talent.
 
