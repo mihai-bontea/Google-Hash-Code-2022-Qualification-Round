@@ -28,7 +28,7 @@ By analyzing the input files, we can see that the highest skill level required f
 
 <img width="2714" height="1729" alt="Image" src="https://github.com/user-attachments/assets/6c49a553-ab64-4925-a6e8-543520471635" />
 
-## 1) Top N Skills: Supply vs Demand
+### 1) Top N Skills: Supply vs Demand
 
 For the most-demanded skills:
 
@@ -37,7 +37,7 @@ For the most-demanded skills:
 
 ---
 
-## 2) Top N Scarcest Skills
+### 2) Top N Scarcest Skills
 
 A single rating that collapses supply and demand into one score per skill:
 
@@ -55,7 +55,7 @@ Skills at the top are the **leverage points**: staff them first and many project
 
 ---
 
-## 3) Supply (`>= L`) - Demand (`= L`) Heatmap
+### 3) Supply (`>= L`) - Demand (`= L`) Heatmap
 
 The same metric as above, but decomposed by level.
 
@@ -63,7 +63,7 @@ Helps show which levels are more undersupplied.
 
 ---
 
-## 4) Project Slack Distribution
+### 4) Project Slack Distribution
 
 \[
 \text{slack} = \text{best before} - \text{duration}
@@ -74,7 +74,7 @@ Helps show which levels are more undersupplied.
 
 ---
 
-## 5) Reward vs Scarcity Tax
+### 5) Reward vs Scarcity Tax
 
 The strategic tradeoff plot:
 
@@ -92,7 +92,7 @@ Additional encodings:
 
 ---
 
-## 6) Project Staffing Pressure
+### 6) Project Staffing Pressure
 
 For each role, we are interested in the **congestion**:
 
