@@ -2,7 +2,6 @@
 
 #include <omp.h>
 #include <chrono>
-#include <queue>
 #include <random>
 #include <algorithm>
 #include <functional>
@@ -11,8 +10,8 @@
 
 using namespace std::chrono;
 
-using SkillToLevel = std::pair<std::string, int>;
-using WeightedAllocation = std::pair<int, std::vector<std::string>>;
+using SkillToLevel = std::pair<int, int>;
+using WeightedAllocation = std::pair<int, std::vector<int>>;
 
 
 class ProjectAllocator
@@ -34,16 +33,16 @@ public:
 
     static bool could_role_be_theoretically_mentored(const SimulationState& simulation_state,
                                                      std::vector<std::pair<SkillToLevel, int>>& roles_to_original_index,
-                                                     const std::vector<std::string>& role_to_contr,
+                                                     const std::vector<int>& role_to_contr,
                                                      const SkillToLevel& role,
                                                      int current_step)
     {
         // can be mentored if someone in a different role has curr_skill >= level_req
 
-        auto contributor_has_skill_at_level = [&simulation_state](const std::string& contr_name, const std::string& skill, int level_req){
-            const auto& contr_per_levels = simulation_state.skill_to_contributors.find(skill)->second;
+        auto contributor_has_skill_at_level = [&simulation_state](int contr_id, int skill_id, int level_req){
+            const auto& contr_per_levels = simulation_state.skill_to_contributors[skill_id];
             for (int level = level_req; level <= 20; ++level)
-                if (contr_per_levels[level].contains(contr_name))
+                if (contr_per_levels[level].contains(contr_id))
                     return true;
             return false;
         };
@@ -54,7 +53,7 @@ public:
             const auto& [colleague_skill, _] = roles_to_original_index[step].first;
 
             // Do the colleagues selected so far have the role skill at the required level?
-            const auto& contr_per_levels = simulation_state.skill_to_contributors.find(role.first)->second;
+            const auto& contr_per_levels = simulation_state.skill_to_contributors[role.first];
             for (int level = role.second; level <= 20; ++level)
                 if (contr_per_levels[level].contains(role_to_contr[step]))
                     return true;
@@ -66,14 +65,14 @@ public:
         for (int step = current_step + 1; step < roles_to_original_index.size(); ++step)
         {
             const auto& [curr_skill, level_req] = roles_to_original_index[step].first;
-            const auto& contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
+            const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
 
             // The mentor could also be mentored
             for (int level = level_req - 1; level <= 20; ++level)
             {
                 for (const auto& contr: contr_per_levels[level])
                 {
-                    int contr_available_at = (simulation_state.available_at.find(contr)->second);
+                    int contr_available_at = simulation_state.available_at[contr];
                     // Could mentor the role skill
                     if (contr_available_at <= simulation_state.day && contributor_has_skill_at_level(contr, role.first, role.second))
                         return true;
@@ -88,8 +87,8 @@ public:
                                          bool skip_mentoring)
     {
         auto roles_to_original_index = get_shuffled_roles(project_roles);
-        std::map<std::string, bool> contr_already_chosen;
-        std::vector<std::string> role_to_contr(project_roles.size()), valid_solution(project_roles.size());
+        umap<int, bool> contr_already_chosen;
+        std::vector<int> role_to_contr(project_roles.size()), valid_solution(project_roles.size());
         int solution_points = 0;
         bool solution_found = false;
 
@@ -110,18 +109,18 @@ public:
                 {
                     const auto& [curr_skill, level_req] = roles_to_original_index[role_index].first;
                     const auto& contr_for_role = role_to_contr[role_index];
-                    const auto& contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
+                    const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
 
                     auto can_others_mentor = [&contr_per_levels, &role_to_contr, level_req](){
-                        for (const auto& contr_name: role_to_contr)
+                        for (const auto contr_id: role_to_contr)
                             for (int level = level_req; level <= 20; ++level)
-                                if (contr_per_levels[level].contains(contr_name))
+                                if (contr_per_levels[level].contains(contr_id))
                                     return true;
                         return false;
                     };
 
-                    auto needs_mentorship = [&contr_per_levels, level_req](const std::string& contr_name){
-                        return contr_per_levels[level_req - 1].contains(contr_name);
+                    auto needs_mentorship = [&contr_per_levels, level_req](int contr_id){
+                        return contr_per_levels[level_req - 1].contains(contr_id);
                     };
 
                     if (needs_mentorship(contr_for_role))
@@ -155,24 +154,24 @@ public:
                                                                                               step))
                         continue;
 
-                    const auto& contr_per_levels = simulation_state.skill_to_contributors.find(curr_skill)->second;
+                    const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
                     // Going over all contributors with skill == contr_level
-                    for (const auto &contr_name: contr_per_levels[contr_level])
+                    for (const int contr_id: contr_per_levels[contr_level])
                     {
                         if (is_timer_expired() || solution_found)
                             break;
 
                         // Skip already chosen/busy contributors
-                        int contr_available_at = (simulation_state.available_at.find(contr_name)->second);
-                        if (contr_already_chosen[contr_name] || contr_available_at > simulation_state.day)
+                        int contr_available_at = (simulation_state.available_at[contr_id]);
+                        if (contr_already_chosen[contr_id] || contr_available_at > simulation_state.day)
                             continue;
 
-                        contr_already_chosen[contr_name] = true;
-                        role_to_contr[step] = contr_name;
+                        contr_already_chosen[contr_id] = true;
+                        role_to_contr[step] = contr_id;
 
                         find_allocation_backtracking(step + 1);
 
-                        contr_already_chosen[contr_name] = false;
+                        contr_already_chosen[contr_id] = false;
                     }
                     if (is_timer_expired() || solution_found)
                         break;
@@ -186,7 +185,7 @@ public:
             return {0, {}};
 
         // Formatting the solution
-        std::vector<std::string> solution_in_order(project_roles.size());
+        std::vector<int> solution_in_order(project_roles.size());
         for (int index_in_shuffled = 0; index_in_shuffled < project_roles.size(); ++index_in_shuffled)
         {
             const auto& [skill_to_level, original_index] = roles_to_original_index[index_in_shuffled];
@@ -199,7 +198,7 @@ public:
 
     static WeightedAllocation find_allocation_for_project(const SimulationState& simulation_state, const Project& project)
     {
-        std::vector<std::pair<std::string, int>> skill_to_level;
+        std::vector<std::pair<int, int>> skill_to_level;
         for (const auto& [skill_name, level_req] : project.skill_to_level)
             skill_to_level.emplace_back(skill_name, level_req);
 
@@ -232,7 +231,7 @@ public:
         for (const auto& name : contributor_names)
         {
             const auto& [role_name, skill_req] = project.skill_to_level[role_id];
-            auto& contr_per_levels = simulation_state.skill_to_contributors.find(role_name)->second;
+            auto& contr_per_levels = simulation_state.skill_to_contributors[role_name];
 
             if (contr_per_levels[skill_req - 1].contains(name))
             {

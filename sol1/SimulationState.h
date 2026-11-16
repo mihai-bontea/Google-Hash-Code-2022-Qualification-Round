@@ -1,5 +1,4 @@
 #pragma once
-#include <map>
 #include <cmath>
 #include <vector>
 #include <bitset>
@@ -9,33 +8,33 @@
 
 #define NMAX 999999999
 
-using ProjectAllocation = std::pair<int, std::vector<std::string>>;
-
 struct SimulationState
 {
     const Data& data;
     int day, score_so_far;
     std::vector<ProjectAllocation> proj_to_contrib;
-    std::map<std::string, int> available_at;
-    std::map<std::string, std::set<std::string>[21]> skill_to_contributors;
+    std::vector<int> available_at;
+    std::vector<ContributorsPerSkill> skill_to_contributors;
+
+
     std::bitset<MAX_PROJECTS> project_done;
 
-    explicit SimulationState(const Data& data, const std::map<std::string, std::set<std::string>[21]>& skill_to_contributors)
+    explicit SimulationState(const Data& data, const std::vector<ContributorsPerSkill>& skill_to_contributors)
             : day(0)
             , score_so_far(0)
             , data(data)
             , skill_to_contributors(skill_to_contributors)
     {
-        for (const auto& [skill, contribs_per_level] : skill_to_contributors)
+        available_at.resize(data.nr_contributors);
+        for (const auto& contributors : skill_to_contributors)
         {
             for (int i = 0; i <= 20; ++i)
             {
-                const auto& contr_per_levels = skill_to_contributors.find(skill)->second;
-                if (contr_per_levels[i].empty())
+                if (contributors[i].empty())
                     continue;
 
-                for (const auto& contrib_name : contr_per_levels[i])
-                    available_at[contrib_name] = 0;
+                for (const auto contrib_id : contributors[i])
+                    available_at[contrib_id] = 0;
             }
         }
     }
@@ -46,16 +45,16 @@ struct SimulationState
         const auto& [project_id, contributor_names] = allocation;
         project_done[project_id] = true;
 
-        for (const auto& name : contributor_names)
+        for (const auto contrib_id : contributor_names)
         {
-            available_at[name] = data.projects[project_id].length_in_days + day;
+            available_at[contrib_id] = data.projects[project_id].length_in_days + day;
         }
     }
 
     void pass_days()
     {
         int day_to_jump_to = NMAX;
-        for (const auto& [name, time] : available_at)
+        for (const int time : available_at)
         {
             if (time > day && time < day_to_jump_to)
                 day_to_jump_to = time;
@@ -91,12 +90,12 @@ struct SimulationState
         // At least one non-unique contributor who has that skill at >= level_req must be available
         for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
         {
-            const auto& contr_per_levels = skill_to_contributors.find(curr_skill)->second;
+            const auto& contr_per_levels = skill_to_contributors[curr_skill];
             bool ok = false;
             for (int i = level_req; i <= 20; ++i)
             {
-                for (const auto& contrib_name : contr_per_levels[i])
-                    if (available_at[contrib_name] <= day)
+                for (const auto contrib_id : contr_per_levels[i])
+                    if (available_at[contrib_id] <= day)
                     {
                         ok = true;
                         break;
@@ -109,19 +108,19 @@ struct SimulationState
         }
 
         // At least one unique contributor who has that skill at >= level_req - 1 must be available
-        std::set<std::string> contr_already_chosen;
+        uset<int> contrib_already_chosen;
         for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
         {
-            const auto& contr_per_levels = skill_to_contributors.find(curr_skill)->second;
+            const auto& contr_per_levels = skill_to_contributors[curr_skill];
             bool ok = false;
 
             for (int i = level_req - 1; i <= 20; ++i)
             {
-                for (const auto& contrib_name : contr_per_levels[i])
-                    if (available_at[contrib_name] <= day && !contr_already_chosen.contains(contrib_name))
+                for (const auto contrib_id : contr_per_levels[i])
+                    if (available_at[contrib_id] <= day && !contrib_already_chosen.contains(contrib_id))
                     {
                         ok = true;
-                        contr_already_chosen.insert(contrib_name);
+                        contrib_already_chosen.insert(contrib_id);
                         break;
                     }
                 if (ok)
