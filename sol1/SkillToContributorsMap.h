@@ -24,33 +24,33 @@ public:
         // For each skill, compute the offset in 'rows' where its data begins
         const int nr_skills = static_cast<int>(data.max_skill_level_req.size());
         row_begin.assign(nr_skills + 1, 0);
-        for (int s = 0; s < nr_skills; ++s)
-            row_begin[s + 1] = row_begin[s] + data.max_skill_level_req[s];
+        for (int skill_id = 0; skill_id < nr_skills; ++skill_id)
+            row_begin[skill_id + 1] = row_begin[skill_id] + data.max_skill_level_req[skill_id];
 
         rows.resize(row_begin[nr_skills]);
 
         // Skills that only appear in projects have no entry in skill_to_contributors; their rows simply stay empty.
         const int known_skills = std::min(nr_skills, static_cast<int>(data.skill_to_contributors.size()));
-        for (int s = 0; s < known_skills; ++s)
+        for (int skill_id = 0; skill_id < known_skills; ++skill_id)
         {
-            const auto& per_level = data.skill_to_contributors[s];
+            const auto& per_level = data.skill_to_contributors[skill_id];
             for (int lvl = 1; lvl < static_cast<int>(per_level.size()); ++lvl)
             {
-                const int capped = std::min(lvl, max_level(s));
+                const int capped = std::min(lvl, max_level(skill_id));
                 for (const int c : per_level[lvl])
                     for (int l = 1; l <= capped; ++l)
-                        at_least(s, l)[c] = true;
+                        at_least(skill_id, l)[c] = true;
             }
         }
     }
 
     // 1) Does contributor c have skill s at exactly level l?
-    [[nodiscard]] bool has_exactly(int c, int s, int l) const
+    [[nodiscard]] bool has_exactly(int contributor_id, int skill_id, int level) const
     {
-        assert(l >= 0 && l <= max_level(s));
-        if (!has_at_least(c, s, l))
+        assert(level >= 0 && level <= max_level(skill_id));
+        if (!has_at_least(contributor_id, skill_id, level))
             return false;
-        return l == max_level(s) || !at_least(s, l + 1)[c];
+        return level == max_level(skill_id) || !at_least(skill_id, level + 1)[contributor_id];
     }
 
     // 2) Does contributor c have skill s at level >= l?
@@ -61,18 +61,18 @@ public:
     }
 
     // 3) Raise contributor c's level in skill s by one (saturates at max_req[s]).
-    void level_up(int c, int s)
+    void level_up(int contributor_id, int skill_id)
     {
-        const int cur = level(c, s);
-        if (cur < max_level(s))
-            at_least(s, cur + 1)[c] = true;
+        const int cur = level(contributor_id, skill_id);
+        if (cur < max_level(skill_id))
+            at_least(skill_id, cur + 1)[contributor_id] = true;
     }
 
     // 4) Can anyone in `team` mentor skill s for a role requiring level l?
-    [[nodiscard]] bool can_mentor(const std::vector<int>& team, int s, int l) const
+    [[nodiscard]] bool can_mentor(const std::vector<int>& team, int skill_id, int level) const
     {
-        assert(l >= 1 && l <= max_level(s));
-        const ContributorBits& row = at_least(s, l);
+        assert(level >= 1 && level <= max_level(skill_id));
+        const ContributorBits& row = at_least(skill_id, level);
         return std::ranges::any_of(team, [&](int c) { return row[c]; });
     }
 
@@ -85,7 +85,10 @@ private:
     std::vector<int> row_begin;        // size nr_skills + 1; never changes after construction
     std::vector<ContributorBits> rows; // all skills' level rows, back to back
 
-    [[nodiscard]] int max_level(int s) const { return row_begin[s + 1] - row_begin[s]; }
+    [[nodiscard]] int max_level(int skill_id) const
+    {
+        return row_begin[skill_id + 1] - row_begin[skill_id];
+    }
 
     [[nodiscard]] ContributorBits& at_least(int skill_id, int level)
     {
@@ -93,11 +96,11 @@ private:
     }
 
     // Current (capped) level: at most max_req[s] <= 20 bit tests.
-    [[nodiscard]] int level(int c, int s) const
+    [[nodiscard]] int level(int contributor_id, int skill_id) const
     {
-        int l = 0;
-        while (l < max_level(s) && at_least(s, l + 1)[c])
-            ++l;
-        return l;
+        int level = 0;
+        while (level < max_level(skill_id) && at_least(skill_id, level + 1)[contributor_id])
+            ++level;
+        return level;
     }
 };
