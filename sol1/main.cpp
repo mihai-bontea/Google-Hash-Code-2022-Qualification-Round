@@ -91,6 +91,7 @@ int main()
         Data data(in_prefix + input_file);
 
         std::cout << "Successfully read " << data.nr_contributors << " contributors, and " << data.nr_projects << " projects\n";
+        std::cout << data.skill_to_contributors.size() << std::endl;
 
         SimulationState base_simulation(data, data.skill_to_contributors);
         auto result = simulate(data, base_simulation);

@@ -37,26 +37,13 @@ public:
                                                      const SkillToLevel& role,
                                                      int current_step)
     {
-        // can be mentored if someone in a different role has curr_skill >= level_req
-
-        auto contributor_has_skill_at_level = [&simulation_state](int contr_id, int skill_id, int level_req){
-            const auto& contr_per_levels = simulation_state.skill_to_contributors[skill_id];
-            for (int level = level_req; level <= 20; ++level)
-                if (contr_per_levels[level].contains(contr_id))
-                    return true;
-            return false;
-        };
-
         // Check if contributors chosen so far can mentor
         for (int step = 0; step < current_step; ++step)
         {
-            const auto& [colleague_skill, _] = roles_to_original_index[step].first;
-
             // Do the colleagues selected so far have the role skill at the required level?
-            const auto& contr_per_levels = simulation_state.skill_to_contributors[role.first];
-            for (int level = role.second; level <= 20; ++level)
-                if (contr_per_levels[level].contains(role_to_contr[step]))
-                    return true;
+            const int colleague_id = role_to_contr[step];
+            if (simulation_state.skill_map.has_at_least(colleague_id, role.first, role.second))
+                return true;
         }
 
         // None of the colleagues selected so far are able to mentor this skill, check other available contributors
@@ -64,20 +51,17 @@ public:
 
         for (int step = current_step + 1; step < roles_to_original_index.size(); ++step)
         {
-            const auto& [curr_skill, level_req] = roles_to_original_index[step].first;
-            const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
+            const auto &[curr_skill, level_req] = roles_to_original_index[step].first;
+            const auto &has_skill_at_level = simulation_state.skill_map.at_least(curr_skill, level_req);
 
-            // The mentor could also be mentored
-            for (int level = level_req - 1; level <= 20; ++level)
-            {
-                for (const auto& contr: contr_per_levels[level])
+            for (int contributor_id = 0; contributor_id < simulation_state.data.nr_contributors; ++contributor_id)
+                if (has_skill_at_level[contributor_id] &&
+                    simulation_state.available_at[contributor_id] <= simulation_state.day)
                 {
-                    int contr_available_at = simulation_state.available_at[contr];
                     // Could mentor the role skill
-                    if (contr_available_at <= simulation_state.day && contributor_has_skill_at_level(contr, role.first, role.second))
+                    if (simulation_state.skill_map.has_at_least(contributor_id, role.first, role.second))
                         return true;
                 }
-            }
         }
         return false;
     }
@@ -87,7 +71,8 @@ public:
                                          bool skip_mentoring)
     {
         auto roles_to_original_index = get_shuffled_roles(project_roles);
-        umap<int, bool> contr_already_chosen;
+        std::vector<bool> contr_already_chosen(simulation_state.data.nr_contributors, false);
+
         std::vector<int> role_to_contr(project_roles.size()), valid_solution(project_roles.size());
         int solution_points = 0;
         bool solution_found = false;
@@ -107,20 +92,20 @@ public:
 
                 for (int role_index = 0; role_index < project_roles.size(); ++role_index)
                 {
-                    const auto& [curr_skill, level_req] = roles_to_original_index[role_index].first;
+//                    const auto& [curr_skill, level_req] = roles_to_original_index[role_index].first;
+                    const int curr_skill = roles_to_original_index[role_index].first.first;
+                    const int level_req = roles_to_original_index[role_index].first.second;
                     const auto& contr_for_role = role_to_contr[role_index];
-                    const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
 
-                    auto can_others_mentor = [&contr_per_levels, &role_to_contr, level_req](){
-                        for (const auto contr_id: role_to_contr)
-                            for (int level = level_req; level <= 20; ++level)
-                                if (contr_per_levels[level].contains(contr_id))
-                                    return true;
+                    auto can_others_mentor = [&simulation_state, &role_to_contr, curr_skill, level_req](){
+                        for (const int contr_id : role_to_contr)
+                            if (simulation_state.skill_map.has_at_least(contr_id, curr_skill, level_req))
+                                return true;
                         return false;
                     };
 
-                    auto needs_mentorship = [&contr_per_levels, level_req](int contr_id){
-                        return contr_per_levels[level_req - 1].contains(contr_id);
+                    auto needs_mentorship = [&simulation_state, curr_skill, level_req](int contr_id){
+                        return (simulation_state.skill_map.has_exactly(contr_id, curr_skill, level_req - 1));
                     };
 
                     if (needs_mentorship(contr_for_role))
@@ -133,6 +118,8 @@ public:
                             break;
                         }
                     }
+                    if (simulation_state.skill_map.has_exactly(contr_for_role, curr_skill, level_req))
+                        learning_points++;
                 }
                 if (is_solution_valid)
                 {
@@ -144,38 +131,36 @@ public:
             else
             {
                 const auto& [curr_skill, level_req] = roles_to_original_index[step].first;
-                // For skill between [level_req - 1, max)
-                for (int contr_level = level_req - 1 + skip_mentoring; contr_level <= 20; ++contr_level)
-                {
-                    if (contr_level == level_req - 1 && !could_role_be_theoretically_mentored(simulation_state,
-                                                                                              roles_to_original_index,
-                                                                                              role_to_contr,
-                                                                                              roles_to_original_index[step].first,
-                                                                                              step))
-                        continue;
+                const auto& has_skill_at_level = simulation_state.skill_map.at_least(curr_skill, level_req);
 
-                    const auto& contr_per_levels = simulation_state.skill_to_contributors[curr_skill];
-                    // Going over all contributors with skill == contr_level
-                    for (const int contr_id: contr_per_levels[contr_level])
+                for (int contributor_id = 0; contributor_id < simulation_state.data.nr_contributors; ++contributor_id)
+                    if (has_skill_at_level[contributor_id]
+                    || (simulation_state.skill_map.has_exactly(contributor_id, curr_skill, level_req - 1)
+                    && !skip_mentoring
+                    && could_role_be_theoretically_mentored(simulation_state,
+                                                             roles_to_original_index,
+                                                             role_to_contr,
+                                                             roles_to_original_index[step].first,
+                                                             step)))
                     {
                         if (is_timer_expired() || solution_found)
                             break;
 
                         // Skip already chosen/busy contributors
-                        int contr_available_at = (simulation_state.available_at[contr_id]);
-                        if (contr_already_chosen[contr_id] || contr_available_at > simulation_state.day)
+                        const int contr_available_at = (simulation_state.available_at[contributor_id]);
+                        if (contr_already_chosen[contributor_id] || contr_available_at > simulation_state.day)
                             continue;
 
-                        contr_already_chosen[contr_id] = true;
-                        role_to_contr[step] = contr_id;
+                        contr_already_chosen[contributor_id] = true;
+                        role_to_contr[step] = contributor_id;
 
                         find_allocation_backtracking(step + 1);
 
-                        contr_already_chosen[contr_id] = false;
+                        contr_already_chosen[contributor_id] = false;
+
+                        if (is_timer_expired() || solution_found)
+                            break;
                     }
-                    if (is_timer_expired() || solution_found)
-                        break;
-                }
             }
         };
         find_allocation_backtracking(0);
@@ -205,14 +190,14 @@ public:
         WeightedAllocation results[10];
         WeightedAllocation best_allocation = {0, {}};
 
-        omp_set_num_threads(10);
-        #pragma omp parallel for
-        for (int th_index = 0; th_index < 10; ++th_index)
+//        omp_set_num_threads(10);
+//        #pragma omp parallel for
+        for (int th_index = 0; th_index < 2; ++th_index)
         {
-            bool skip_mentoring = ((th_index % 3) == 0);
+            bool skip_mentoring = ((th_index % 2) == 0);
             results[th_index] = find_alloc(simulation_state, skill_to_level, skip_mentoring);
         }
-        for (int th_index = 0; th_index < 10; ++th_index)
+        for (int th_index = 0; th_index < 2; ++th_index)
         {
             const auto& [learning_points, allocation] = results[th_index];
             if (!allocation.empty() && learning_points >= best_allocation.first)
@@ -222,23 +207,20 @@ public:
         return best_allocation;
     }
 
-    static void update_contributors(const Data& data, SimulationState& simulation_state, const ProjectAllocation& project_allocation)
+    static void update_contributors(const Data& data, SimulationState& state, const ProjectAllocation& allocation)
     {
-        const auto& [project_id, contributor_names] = project_allocation;
-        const auto& project = data.projects[project_id];
+        const auto& [project_id, contributor_ids] = allocation;
+        const auto& roles = data.projects[project_id].skill_to_level;
+        assert(contributor_ids.size() == roles.size());
 
-        int role_id = 0;
-        for (const auto& name : contributor_names)
+        for (std::size_t role = 0; role < roles.size(); ++role)
         {
-            const auto& [role_name, skill_req] = project.skill_to_level[role_id];
-            auto& contr_per_levels = simulation_state.skill_to_contributors[role_name];
+            const auto [skill_id, level_req] = roles[role];
+            const int c = contributor_ids[role];
 
-            if (contr_per_levels[skill_req - 1].contains(name))
-            {
-                contr_per_levels[skill_req - 1].erase(name);
-                contr_per_levels[skill_req].insert(name);
-            }
-            role_id++;
+            // Level up if current level <= level_req
+            if (state.skill_map.has_exactly(c, skill_id, level_req) || !state.skill_map.has_at_least(c, skill_id, level_req))
+                state.skill_map.level_up(c, skill_id);
         }
     }
 };

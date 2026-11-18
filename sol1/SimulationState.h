@@ -3,19 +3,19 @@
 #include <vector>
 #include <bitset>
 
-#include "Data.h"
+#include "SkillToContributorsMap.h"
 #include "ProjectAllocator.h"
 
 #define NMAX 999999999
 
-struct SimulationState
+class SimulationState
 {
+public:
     const Data& data;
     int day, score_so_far;
     std::vector<ProjectAllocation> proj_to_contrib;
     std::vector<int> available_at;
-    std::vector<ContributorsPerSkill> skill_to_contributors;
-
+    SkillToContributorsMap skill_map;
 
     std::bitset<MAX_PROJECTS> project_done;
 
@@ -23,7 +23,7 @@ struct SimulationState
             : day(0)
             , score_so_far(0)
             , data(data)
-            , skill_to_contributors(skill_to_contributors)
+            , skill_map(data)
     {
         available_at.resize(data.nr_contributors);
         for (const auto& contributors : skill_to_contributors)
@@ -81,52 +81,62 @@ struct SimulationState
         return std::max(0, (project.score - penalty));
     };
 
-    bool can_project_be_done(int project_index)
+    [[nodiscard]] bool can_project_be_done(int project_index) const
     {
         // Project has already been done/deemed unuseful
         if (project_done[project_index])
             return false;
 
-        // At least one non-unique contributor who has that skill at >= level_req must be available
-        for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
+        if (!is_hard_skill_requirement_met(project_index))
+            return false;
+
+        return is_unique_contributor_requirement_met(project_index);
+    }
+
+    // At least one non-unique* contributor who has that skill at >= level_req must be available
+    // (The same contributor can mentor multiple roles)
+    [[nodiscard]] bool is_hard_skill_requirement_met (int project_index) const
+    {
+        for (const auto &[skill_id, level_req]: data.projects[project_index].skill_to_level)
         {
-            const auto& contr_per_levels = skill_to_contributors[curr_skill];
-            bool ok = false;
-            for (int i = level_req; i <= 20; ++i)
-            {
-                for (const auto contrib_id : contr_per_levels[i])
-                    if (available_at[contrib_id] <= day)
-                    {
-                        ok = true;
-                        break;
-                    }
-                if (ok)
+            bool skill_can_be_staffed = false;
+
+            const auto& has_skill_at_level = skill_map.at_least(skill_id, level_req);
+            for (int contrib_id = 0; contrib_id < data.nr_contributors; ++contrib_id)
+                if (has_skill_at_level[contrib_id] && available_at[contrib_id] <= day)
+                {
+                    skill_can_be_staffed = true;
                     break;
-            }
-            if (!ok)
+                }
+            if (!skill_can_be_staffed)
                 return false;
         }
+        return true;
+    }
 
+    [[nodiscard]] bool is_unique_contributor_requirement_met(int project_index) const
+    {
         // At least one unique contributor who has that skill at >= level_req - 1 must be available
         uset<int> contrib_already_chosen;
-        for (const auto& [curr_skill, level_req] : data.projects[project_index].skill_to_level)
-        {
-            const auto& contr_per_levels = skill_to_contributors[curr_skill];
-            bool ok = false;
 
-            for (int i = level_req - 1; i <= 20; ++i)
-            {
-                for (const auto contrib_id : contr_per_levels[i])
-                    if (available_at[contrib_id] <= day && !contrib_already_chosen.contains(contrib_id))
-                    {
-                        ok = true;
-                        contrib_already_chosen.insert(contrib_id);
-                        break;
-                    }
-                if (ok)
+        for (const auto &[skill_id, level_req]: data.projects[project_index].skill_to_level)
+        {
+            // Everyone can work on level 1 with a mentor
+            if (level_req == 1)
+                continue;
+
+            bool skill_can_be_staffed = false;
+
+            const auto& has_skill_at_level = skill_map.at_least(skill_id, level_req);
+            for (int contrib_id = 0; contrib_id < data.nr_contributors; ++contrib_id)
+                if (has_skill_at_level[contrib_id] && available_at[contrib_id] <= day && !contrib_already_chosen.contains(contrib_id))
+                {
+                    skill_can_be_staffed = true;
+                    contrib_already_chosen.insert(contrib_id);
                     break;
-            }
-            if (!ok)
+                }
+
+            if (!skill_can_be_staffed)
                 return false;
         }
         return true;

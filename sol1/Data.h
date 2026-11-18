@@ -53,6 +53,7 @@ public:
     std::vector<ContributorsPerSkill> skill_to_contributors;
 
     std::vector<Project> projects;
+    std::vector<int> max_skill_level_req;
 
     Data(const std::string& filename)
     {
@@ -72,6 +73,7 @@ public:
 
         // Read the contributor info
         int current_contributor_id = 0;
+        int max_skill_level = 0;
         for (int contr_index = 0; contr_index < nr_contributors; ++contr_index)
         {
             std::string contributor_name;
@@ -114,6 +116,7 @@ public:
                 std::string skill_name;
                 int skill_level;
                 fin >> skill_name >> skill_level;
+                max_skill_level = std::max(max_skill_level, skill_level);
 
                 if (!skill_to_id_temp.contains(skill_name))
                 {
@@ -127,14 +130,11 @@ public:
             projects.emplace_back(std::move(name), length_in_days, score, best_before_day, std::move(skill_to_level));
         }
 
-        // No skill in input means skill at level 0(can be improved with mentoring)
-        for (int contrib_id = 0; contrib_id < nr_contributors; ++contrib_id)
-            for (auto& [skill_name, contr_to_skills_per_level] : skill_to_contributors_temp)
-                if (!contr_to_skills[contrib_id].contains(skill_name))
-                {
-                    auto& level0_set_for_skill = contr_to_skills_per_level[0];
-                    level0_set_for_skill.insert(contrib_id);
-                }
+        // For each skill, obtain the highest level required in that skill to complete a project
+        max_skill_level_req.assign(current_skill_id, 0);
+        for (const auto& project : projects)
+            for (auto [skill_id, level] : project.skill_to_level)
+                max_skill_level_req[skill_id] = std::max(max_skill_level_req[skill_id], level);
 
         // Build the vector based on the map
         build_skill_to_contributors(std::move(skill_to_contributors_temp));

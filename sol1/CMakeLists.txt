@@ -19,7 +19,8 @@ FetchContent_MakeAvailable(unordered_dense)
 
 find_package(OpenMP REQUIRED)
 
-add_executable(sol1 main.cpp Data.h ProjectAllocator.h SimulationState.h)
+add_executable(sol1 main.cpp Data.h ProjectAllocator.h SimulationState.h
+        SkillToContributorsMap.h)
 
 target_link_libraries(sol1 PRIVATE
         unordered_dense::unordered_dense
