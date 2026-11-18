@@ -75,14 +75,17 @@ for solution in solutions:
                 for contrib_name in contrib_names:
                     skill_name, skill_level = proj_name_to_info[proj_name].skills[count]
                     assert(contrib_to_skills[contrib_name][skill_name] >= skill_level - 1)
+
+                    # Contributors working on roles with equal or higher skill requirement will level up
+                    if skill_level >= contrib_to_skills[contrib_name][skill_name]:
+                        contrib_to_skills[contrib_name][skill_name] += 1
+                        skill_increase += 1
+
                     # Contributor requires mentorship
                     if contrib_to_skills[contrib_name][skill_name] == skill_level - 1:
                         # Ensure that someone can provide mentorship
                         assert any(contrib_to_skills[name][skill_name] >= skill_level for name in contrib_names)
 
-                        # Level up the contributor in that skill if needed
-                        contrib_to_skills[contrib_name][skill_name] += 1
-                        skill_increase += 1
                     count += 1
 
                 # Score the project
