@@ -44,7 +44,18 @@ public:
         }
     }
 
-    // 1) Does contributor c have skill s at exactly level l?
+    // Contributors with skill s at exactly level l
+    [[nodiscard]] ContributorBits exactly(int skill_id, int level) const
+    {
+        assert(level >= 0 && level <= max_level(s));
+        ContributorBits result = (level == 0) ? ~ContributorBits{} : row(skill_id, level);
+        // Only keep the set bits in row(l) that aren't also set in row(l + 1) (i.e. it has exactly level l)
+        if (level < max_level(skill_id))
+            result &= ~row(skill_id, level + 1);
+        return result;
+    }
+
+    // Does contributor c have skill s at exactly level l?
     [[nodiscard]] bool has_exactly(int contributor_id, int skill_id, int level) const
     {
         assert(level >= 0 && level <= max_level(skill_id));
@@ -53,22 +64,22 @@ public:
         return level == max_level(skill_id) || !at_least(skill_id, level + 1)[contributor_id];
     }
 
-    // 2) Does contributor c have skill s at level >= l?
+    // Does contributor c have skill s at level >= l?
     [[nodiscard]] bool has_at_least(int contributor_id, int skill_id, int level) const
     {
         assert(level >= 0 && level <= max_level(skill_id));
         return level == 0 || at_least(skill_id, level)[contributor_id];
     }
 
-    // 3) Raise contributor c's level in skill s by one (saturates at max_req[s]).
+    // Raise contributor c's level in skill s by one (saturates at max_req[s]).
     void level_up(int contributor_id, int skill_id)
     {
-        const int cur = level(contributor_id, skill_id);
-        if (cur < max_level(skill_id))
-            at_least(skill_id, cur + 1)[contributor_id] = true;
+        const int current_level = level(contributor_id, skill_id);
+        if (current_level < max_level(skill_id))
+            at_least(skill_id, current_level + 1)[contributor_id] = true;
     }
 
-    // 4) Can anyone in `team` mentor skill s for a role requiring level l?
+    // Can anyone in `team` mentor skill s for a role requiring level l?
     [[nodiscard]] bool can_mentor(const std::vector<int>& team, int skill_id, int level) const
     {
         assert(level >= 1 && level <= max_level(skill_id));
@@ -81,18 +92,16 @@ public:
         return rows[row_begin[skill_id] + level - 1];
     }
 
-private:
-    std::vector<int> row_begin;        // size nr_skills + 1; never changes after construction
-    std::vector<ContributorBits> rows; // all skills' level rows, back to back
-
     [[nodiscard]] int max_level(int skill_id) const
     {
         return row_begin[skill_id + 1] - row_begin[skill_id];
     }
 
-    [[nodiscard]] ContributorBits& at_least(int skill_id, int level)
+    // Working a role of 'role_level' improves you by 1 if your level <= role_level.
+    void level_up_if_learning(int contributor_id, int skill_id, int role_level)
     {
-        return rows[row_begin[skill_id] + level - 1];
+        if (level(contributor_id, skill_id) <= role_level)
+            level_up(contributor_id, skill_id);
     }
 
     // Current (capped) level: at most max_req[s] <= 20 bit tests.
@@ -102,5 +111,19 @@ private:
         while (level < max_level(skill_id) && at_least(skill_id, level + 1)[contributor_id])
             ++level;
         return level;
+    }
+
+private:
+    std::vector<int> row_begin;        // size nr_skills + 1; never changes after construction
+    std::vector<ContributorBits> rows; // all skills' level rows, back to back
+
+    [[nodiscard]] ContributorBits& at_least(int skill_id, int level)
+    {
+        return rows[row_begin[skill_id] + level - 1];
+    }
+
+    [[nodiscard]] const ContributorBits& row(int skill_id, int level) const
+    {
+        return rows[row_begin[skill_id] + level - 1];
     }
 };
