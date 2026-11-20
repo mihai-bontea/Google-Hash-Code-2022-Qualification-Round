@@ -6,23 +6,27 @@
 
 ### Strategy
 
-At each step, a priority queue with the best scoring project is populated(also taking the overdue project penalty into account). A quick check is done on whether the project could be done with the contributors available at that specific day(for each role, at least one non-unique contributor who has the skill at the required level or higher, and at least one unique contributor who has the skill at level - 1). This method never leads to false negatives, but can lead to false positives. This is ok because it only needs to be good enough to skip the vast majority of backtracking operations while also having very little overhead.
+Instead of one carefully searched simulation, **many independent greedy simulations run in parallel with OpenMP**, each thread with its own RNG, and the best result is kept. Each simulation gets a random strategy: either a static project order (score, length, role count and deadline with random exponents) or a dynamic one recomputed every day from the original heuristic with random weights (score² minus manpower, overdue and ahead-of-time penalties). Simulations jump straight from one day when contributors finish to the next. Optionally, a second pass starts 0-point projects with leftover contributors, as long as somebody gains a level that is still needed. The search stops after 15 minutes, or earlier if the best score hasn't improved for a set time.
 
-Then, **using a thread pool, 10 backtracking tasks are simultaneously started** on a randomly shuffled array representing the project roles. Each has a 15 second timer after which execution is stopped even if no solution has been found. Out of these 10 solutions, **the one that leads to the most mentorship/learning is selected**. If no solution can be found at that moment, the simulation day is increased.
+Before staffing, a quick bitset check rejects most projects that can't be done: for each role, someone free at the required level or higher must exist. The team is then built **greedily, hardest roles first**, so high-level people join early and can mentor the rest. Each candidate is scored with fixed weights: **a bonus for learning from the role, a bonus for being a mentee, a penalty per level of over-qualification, and a bonus for each later role they could mentor**. A good mentor can therefore be chosen over someone at the exact level, but only when they cover enough later roles to justify it.
 
-By analyzing the input files, we can see that the highest skill level required for a project is 20. This means that for each (skill, level) pair, we can greatly reduce the lookup time for contributors having that skill at that level or higher, by splitting the set of contributors into an array of 21 sets, such that set[i] contains the contributors who have that skill at exactly level i. This might seem small but makes a great difference in speed.
+### Data layout optimizations
+
+For each skill, the contributors are stored as **cumulative bitsets**: row L holds everyone at level L or higher. Levels are capped at the highest level any project requires, and all rows sit in one flat array(This has smaller memory footprint than the previous array of sets, and has better cache locality). "At least L" is a single row, "exactly L" is two rows XOR-ed, and a level-up sets one bit. Combined with a bitset of free contributors, candidate searches become word-wise ANDs.
+
+All strings appearing in the input (contributor, project and skill names) are translated into integers such that maps can be turned into plain vectors and sets can be turned into bitsets. This also avoids string operations inside the hot path. When writing the output, the ids are translated back to names.
 
 ### Scoring
 
-| Input File              | Score      | Skill Increase |
-|-------------------------|------------|----------------|
-| a_an_example            | 20         | 0              |
-| b_better_start_small    | 344,991    | 29             |
-| c_collaboration         | 255,027    | 57             |
-| d_dense_schedule        | 53,712     | 8              |
-| e_exceptional_skills    | 1,601,565  | 1,464          |
-| f_find_great_mentors    | 599,091    | 54,939         |
-| **Total**               | **2,854,406** | **56,497**  |
+| Input File              | Score       | Skill Increase |
+|-------------------------|-------------|----------------|
+| a_an_example            | 40          | 3              |
+| b_better_start_small    | 971,561     | 110            |
+| c_collaboration         | 306,550     | 3,088          |
+| d_dense_schedule        | 255,694     | 499            |
+| e_exceptional_skills    | 1,620,596   | 1,007          |
+| f_find_great_mentors    | 653,951     | 67,100         |
+| **Total**               | **3,808,392** | **71,807**   |
 
 ## Input file visualization
 
