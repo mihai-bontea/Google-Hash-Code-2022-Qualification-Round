@@ -1,144 +1,122 @@
 #pragma once
-#include <cmath>
+#include <algorithm>
+#include <cassert>
+#include <functional>
+#include <utility>
 #include <vector>
-#include <bitset>
 
+#include "Data.h"
 #include "SkillToContributorsMap.h"
-#include "ProjectAllocator.h"
-
-#define NMAX 999999999
 
 class SimulationState
 {
 public:
     const Data& data;
-    int day, score_so_far;
-    std::vector<ProjectAllocation> proj_to_contrib;
-    std::vector<int> available_at;
+    int day = 0;
+    long long score_so_far = 0;
+    std::vector<ProjectAllocation> proj_to_contrib; // in the order projects were started
+    ContributorBits free_now;                       // contributors not working on anything today
     SkillToContributorsMap skill_map;
 
-    std::bitset<MAX_PROJECTS> project_done;
-
-    explicit SimulationState(const Data& data, const std::vector<ContributorsPerSkill>& skill_to_contributors)
-            : day(0)
-            , score_so_far(0)
-            , data(data)
-            , skill_map(data)
+    SimulationState(const Data& data, const SkillToContributorsMap& initial_skills)
+            : data(data)
+            , skill_map(initial_skills)
     {
-        available_at.resize(data.nr_contributors);
-        for (const auto& contributors : skill_to_contributors)
-        {
-            for (int i = 0; i <= 20; ++i)
-            {
-                if (contributors[i].empty())
-                    continue;
-
-                for (const auto contrib_id : contributors[i])
-                    available_at[contrib_id] = 0;
-            }
-        }
+        for (int c = 0; c < data.nr_contributors; ++c)
+            free_now[c] = true;
     }
 
-    void add_allocation(const ProjectAllocation& allocation)
-    {
-        proj_to_contrib.push_back(allocation);
-        const auto& [project_id, contributor_names] = allocation;
-        project_done[project_id] = true;
+    [[nodiscard]] bool anyone_busy() const { return !releases.empty(); }
 
-        for (const auto contrib_id : contributor_names)
-        {
-            available_at[contrib_id] = data.projects[project_id].length_in_days + day;
-        }
-    }
-
+    // Jump to the next day someone finishes a project, and free everyone finishing then.
     void pass_days()
     {
-        int day_to_jump_to = NMAX;
-        for (const int time : available_at)
+        assert(anyone_busy());
+        day = releases.front().first;
+
+        while (!releases.empty() && releases.front().first <= day)
         {
-            if (time > day && time < day_to_jump_to)
-                day_to_jump_to = time;
+            free_now[releases.front().second] = true;
+            std::ranges::pop_heap(releases, std::greater<>{});
+            releases.pop_back();
         }
-        day = day_to_jump_to;
     }
 
-    int heuristic_score(int project_index)
+    [[nodiscard]] int days_late_if_started_today(int project_index) const
     {
-        const auto& project = data.projects[project_index];
-        int manpower_penalty = project.length_in_days * project.skill_to_level.size();
-        int day_penalty = (project.best_before_day > day + project.length_in_days)? 0 :
-                      day + project.length_in_days - project.best_before_day;
-        int ahead_of_time_penalty = std::max(0, project.best_before_day - project.length_in_days - day) * 3;
-
-        return std::max(0, ((int)std::pow(project.score, 2) - manpower_penalty - day_penalty - ahead_of_time_penalty));
+        const Project& project = data.projects[project_index];
+        return std::max(0, day + project.length_in_days - project.best_before_day);
     }
 
-    int actual_score(int project_index)
+    [[nodiscard]] int actual_score(int project_index) const
     {
-        const auto& project = data.projects[project_index];
-        int penalty = (project.best_before_day > day + project.length_in_days)? 0 :
-                day + project.length_in_days - project.best_before_day;
-        return std::max(0, (project.score - penalty));
-    };
+        return std::max(0, data.projects[project_index].score - days_late_if_started_today(project_index));
+    }
 
+    // Cheap necessary conditions; a full team may still not exist.
     [[nodiscard]] bool can_project_be_done(int project_index) const
     {
-        // Project has already been done/deemed unuseful
-        if (project_done[project_index])
+        const auto& roles = data.projects[project_index].skill_to_level;
+        if (free_now.count() < roles.size())
             return false;
 
-        if (!is_hard_skill_requirement_met(project_index))
-            return false;
-
-        return is_unique_contributor_requirement_met(project_index);
+        return is_hard_skill_requirement_met(project_index);
     }
 
-    // At least one non-unique* contributor who has that skill at >= level_req must be available
-    // (The same contributor can mentor multiple roles)
-    [[nodiscard]] bool is_hard_skill_requirement_met (int project_index) const
+    // Every role needs someone free at >= its level in its skill:
+    // either to fill it, or to mentor whoever fills it.
+    [[nodiscard]] bool is_hard_skill_requirement_met(int project_index) const
     {
-        for (const auto &[skill_id, level_req]: data.projects[project_index].skill_to_level)
-        {
-            bool skill_can_be_staffed = false;
-
-            const auto& has_skill_at_level = skill_map.at_least(skill_id, level_req);
-            for (int contrib_id = 0; contrib_id < data.nr_contributors; ++contrib_id)
-                if (has_skill_at_level[contrib_id] && available_at[contrib_id] <= day)
-                {
-                    skill_can_be_staffed = true;
-                    break;
-                }
-            if (!skill_can_be_staffed)
+        for (const auto& [skill_id, level_req] : data.projects[project_index].skill_to_level)
+            if ((skill_map.at_least(skill_id, level_req) & free_now).none())
                 return false;
-        }
         return true;
     }
 
-    [[nodiscard]] bool is_unique_contributor_requirement_met(int project_index) const
+    // How many team members would gain a level that matters from this project:
+    // level <= role level, and not already at the highest level any project needs.
+    [[nodiscard]] int count_learners(int project_index, const std::vector<int>& team) const
     {
-        // At least one unique contributor who has that skill at >= level_req - 1 must be available
-        uset<int> contrib_already_chosen;
+        const auto& roles = data.projects[project_index].skill_to_level;
 
-        for (const auto &[skill_id, level_req]: data.projects[project_index].skill_to_level)
+        int learners = 0;
+        for (std::size_t role = 0; role < team.size(); ++role)
         {
-            // Everyone can work on level 1 with a mentor
-            if (level_req == 1)
-                continue;
-
-            bool skill_can_be_staffed = false;
-
-            const auto& has_skill_at_level = skill_map.at_least(skill_id, level_req);
-            for (int contrib_id = 0; contrib_id < data.nr_contributors; ++contrib_id)
-                if (has_skill_at_level[contrib_id] && available_at[contrib_id] <= day && !contrib_already_chosen.contains(contrib_id))
-                {
-                    skill_can_be_staffed = true;
-                    contrib_already_chosen.insert(contrib_id);
-                    break;
-                }
-
-            if (!skill_can_be_staffed)
-                return false;
+            const auto& [skill_id, level_req] = roles[role];
+            const int current = skill_map.level(team[role], skill_id);
+            if (current <= level_req && current < skill_map.max_level(skill_id))
+                ++learners;
         }
-        return true;
+        return learners;
     }
+
+    // Start the project today with 'team' (one contributor per role, in role order):
+    // adds its score, levels up whoever learns, and marks the team busy until it ends.
+    void add_allocation(int project_index, std::vector<int> team)
+    {
+        const Project& project = data.projects[project_index];
+        assert(team.size() == project.skill_to_level.size());
+
+        score_so_far += actual_score(project_index);
+        const int end_day = day + project.length_in_days;
+
+        for (std::size_t role = 0; role < team.size(); ++role)
+        {
+            const auto& [skill_id, level_req] = project.skill_to_level[role];
+            const int c = team[role];
+
+            // Applied now instead of at end_day: c is busy until then anyway
+            skill_map.level_up_if_learning(c, skill_id, level_req);
+
+            free_now[c] = false;
+            releases.emplace_back(end_day, c);
+            std::ranges::push_heap(releases, std::greater<>{});
+        }
+
+        proj_to_contrib.emplace_back(project_index, std::move(team));
+    }
+
+private:
+    using Release = std::pair<int, int>; // (day the contributor is free again, contributor id)
+    std::vector<Release> releases;       // min-heap on day
 };
